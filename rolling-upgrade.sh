@@ -5,16 +5,9 @@ set -euo pipefail
 #
 # See README.md for details
 
-VERSION=${VERSION:-noversion}
 DRY_RUN=${DRY_RUN:-}
-DRAIN_TIMEOUT=${DRAIN_TIMEOUT:-300}
-
-if [ "$VERSION" == "noversion" ]
-then
-  echo "Missing env var VERSION"
-  echo "This is the version you want to end up with; e.g. run \`VERSION=1.19 $0\` if you want to upgrade from 1.18 to 1.19."
-  exit 1
-fi
+DRAIN_TIMEOUT=${DRAIN_TIMEOUT:-3600}
+TARGET_STORAGE_SIZE=${TARGET_STORAGE_SIZE:-104845292Ki}
 
 function run() {
   if [ -z "$DRY_RUN" ]; then
@@ -28,24 +21,17 @@ function run() {
 bold=$(tput bold)
 normal=$(tput sgr0)
 
-while true
-do
+while true; do
   echo "Looking for upgradeable nodes..."
-  UPGRADEABLE_NODES=$(kubectl get node --no-headers | { grep -v "$VERSION" || true; } | awk '{print $1}')
-  if [ -z "$UPGRADEABLE_NODES" ]
-  then
-    echo "No more upgradeable nodes - rollout finished!"
-    exit 0
-  else
-    echo "Found the following upgradeable nodes:"
-    echo "$UPGRADEABLE_NODES"
-  fi
+  ALL_NODES=$(kubectl get node --no-headers | awk '{print $1}')
 
-  echo ""
-  echo "Upgrading all nodes. 🚀"
+  for NODE in $ALL_NODES; do
+    STORAGE_SIZE=$(kubectl get node -o jsonpath={.status.capacity.ephemeral-storage} $NODE)
 
-  for NODE in $UPGRADEABLE_NODES
-  do
+    if [ $STORAGE_SIZE == $TARGET_STORAGE_SIZE ]; then
+      continue
+    fi
+
     echo ""
     echo "• Upgrading node ${bold}$NODE${normal}"
     echo ""
